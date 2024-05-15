@@ -1,6 +1,7 @@
-- ~~asset manager cleaner upper~~
+- ~~asset manager cleaner upper~~ use is_a to instance entities so they share textures
 - ~~character controller~~
-- refine character controller to allow fast movements back and forth
+- ~~refine character controller to allow fast movements back and forth~~ kinda half done
+- render sorter
 - enemy spawner
 - sword and sword controls
 - collisions

@@ -1,5 +1,7 @@
 #pragma once
 
+//#define ENABLE_REST
+
 #define W_WIDTH 1920
 #define W_HEIGHT 1000
 
