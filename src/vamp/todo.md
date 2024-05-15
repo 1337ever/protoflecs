@@ -1,0 +1,9 @@
+- ~~asset manager cleaner upper~~
+- ~~character controller~~
+- refine character controller to allow fast movements back and forth
+- enemy spawner
+- sword and sword controls
+- collisions
+- upgrades and upgrade ui
+- skateboard upgrade
+- combo ui
