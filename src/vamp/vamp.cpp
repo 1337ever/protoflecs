@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cstdio>
 #include <vector>
 
 #include <flecs.h>
@@ -71,6 +70,9 @@ struct R_Layer {
     int layer;
 };
 
+//tag component indicating the attached entity has already been sorted into the sprite layering system
+struct Sorted {};
+
 int main() {
     flecs::world ecs;
     ecs.set_threads(4);
@@ -80,7 +82,7 @@ int main() {
     ecs.import<flecs::monitor>();
     #endif
 
-    //SetTargetFPS(10);
+    //SetTargetFPS(1);
     InitWindow(W_WIDTH, W_HEIGHT, "Octophant Scimitar");
 
     auto sys_vel = ecs.system<Position, const Velocity>()
@@ -134,20 +136,25 @@ int main() {
     //auto e2 = ecs.entity().is_a(evilophant);
     //e2.set<Position>({500, 500});
     
-
+    //awesome array of vectors, yeah i manage memory, yeah i go fastish
+    std::vector<flecs::entity> drawables[MAX_RENDER_LAYERS];
     //getting a pointer == optional component?
-    auto sys_draw_object = ecs.system<const Position, const Scale, const Rotation, C_Texture, const R_Layer>()
-        .iter([](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, C_Texture *t, const R_Layer *l) {
+    auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, C_Texture, const R_Layer>()
+        .kind(flecs::OnUpdate)
+        .iter([&drawables](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, C_Texture *t, const R_Layer *l) {
             //DrawTextureEx(t.tex, p.pos, r.rot, s.scale, WHITE);
             //flecs::entity drawables[it.count()];
 
-            //awesome array of vectors, yeah i manage memory, yeah i go fastish
-            std::vector<flecs::entity> drawables[MAX_RENDER_LAYERS];
-            for (auto i : it) {
+
+            //for (auto i : it) {
+            for (size_t i = 0; i < it.count(); i ++) {
+                //if (drawables[l[i].layer] != it.entity(i))
+                printf("inserting layer %d\t", l[i].layer);
                 drawables[l[i].layer].push_back(it.entity(i));
             }
             
-            for (int v = MAX_RENDER_LAYERS-1; v >= 0; v--) {
+            printf("\n");
+            for (int v = MAX_RENDER_LAYERS-1; v >=  0; v--) {
                 printf("%d\n", v);
                 //printf("drawing layer: %d\n", v);
                 for (int d = 0; d < drawables[v].size(); d++) {
@@ -162,6 +169,28 @@ int main() {
                 } 
             }
         });
+/*
+    auto sys_draw_object = ecs.system<const Position, const Scale, const Rotation, C_Texture, const R_Layer>()
+        .kind(flecs::OnUpdate)
+        .iter([&drawables](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, C_Texture *t, const R_Layer *l) {
+            //DrawTextureEx(t.tex, p.pos, r.rot, s.scale, WHITE);
+            //flecs::entity drawables[it.count()];
+
+            for (int v = MAX_RENDER_LAYERS-1; v >=  0; v--) {
+                //printf("%d\n", v);
+                //printf("drawing layer: %d\n", v);
+                for (int d = 0; d < drawables[v].size(); d++) {
+                    flecs::entity e =  drawables[v][d];
+                    //printf("drawing entity: %d on layer %d\n", d, v);
+                    auto tex = e.get_ref<C_Texture>()->tex;
+                    auto pos = e.get_ref<Position>()->pos;
+                    auto rot = e.get_ref<Rotation>()->rot;
+                    auto scale = e.get_ref<Scale>()->scale; 
+
+                    DrawTextureEx(*tex, pos, rot, scale, WHITE);
+                } 
+            }
+        });*/
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
         .each([](Velocity& v, Damping& d, const Speed& s, const Player& p) {
