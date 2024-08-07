@@ -8,5 +8,3 @@
 #define MAX_TEXTURES 512
 
 #define CHARACTER_MIN_SPEED 10
-
-#define MAX_RENDER_LAYERS 24

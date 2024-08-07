@@ -146,18 +146,11 @@ int main() {
     //e2.set<Position>({500, 500});
     
     //getting a pointer == optional component?
-    auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, const C_Texture, R_Layer>()
+    auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, const C_Texture, const R_Layer>()
         .kind(flecs::OnUpdate)
         .order_by<R_Layer>(layer_compare) //absolute life saver
-        .iter([](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, const C_Texture *t, R_Layer *l) {
-            for (auto i : it) {
-                auto tex = it.entity(i).get_ref<C_Texture>()->tex;
-                auto pos = it.entity(i).get_ref<Position>()->pos;
-                auto rot = it.entity(i).get_ref<Rotation>()->rot;
-                auto scale = it.entity(i).get_ref<Scale>()->scale; 
-                DrawTextureEx(*tex, pos, rot, scale, WHITE);
-            }
-            
+        .each([](const Position& p, const Scale& s, const Rotation& r, const C_Texture& t, const R_Layer& l) {
+            DrawTextureEx(*t.tex, p.pos, r.rot, s.scale, WHITE);
         });
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
