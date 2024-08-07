@@ -67,9 +67,18 @@ struct Col_Layer {
 
 //render layer
 struct R_Layer {
-    int layer = 0;
-    bool sorted = false;
+    int z = 1;
 };
+
+static inline int layer_compare(flecs::entity_t e1, const R_Layer* l1, flecs::entity_t e2, const R_Layer* l2) {
+  if (l1->z < l2->z) {
+    return 1;
+  } else if (l1->z > l2->z) {
+    return -1;
+  } else {
+    return 0;
+  }
+}
 
 int main() {
     flecs::world ecs;
@@ -136,33 +145,19 @@ int main() {
     //auto e2 = ecs.entity().is_a(evilophant);
     //e2.set<Position>({500, 500});
     
-    //awesome array of vectors, yeah i manage memory, yeah i go fastish
-    std::vector<flecs::entity> drawables[MAX_RENDER_LAYERS];
     //getting a pointer == optional component?
     auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, const C_Texture, R_Layer>()
         .kind(flecs::OnUpdate)
-        .iter([&drawables](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, const C_Texture *t, R_Layer *l) {
-
-            //still have to check every entity to see if its sorted, this should prob be in a diff system and run less often than every frame
-            for (size_t i = 0; i < it.count(); i ++) {
-                auto sort = it.entity(i).get_mut<R_Layer>();
-                if (!sort->sorted) {
-                    drawables[l[i].layer].push_back(it.entity(i));
-                    sort->sorted = true;
-                }
+        .order_by<R_Layer>(layer_compare) //absolute life saver
+        .iter([](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, const C_Texture *t, R_Layer *l) {
+            for (auto i : it) {
+                auto tex = it.entity(i).get_ref<C_Texture>()->tex;
+                auto pos = it.entity(i).get_ref<Position>()->pos;
+                auto rot = it.entity(i).get_ref<Rotation>()->rot;
+                auto scale = it.entity(i).get_ref<Scale>()->scale; 
+                DrawTextureEx(*tex, pos, rot, scale, WHITE);
             }
             
-            for (int v = MAX_RENDER_LAYERS-1; v >=  0; v--) {
-                for (int d = 0; d < drawables[v].size(); d++) {
-                    flecs::entity e =  drawables[v][d];
-                    auto tex = e.get_ref<C_Texture>()->tex;
-                    auto pos = e.get_ref<Position>()->pos;
-                    auto rot = e.get_ref<Rotation>()->rot;
-                    auto scale = e.get_ref<Scale>()->scale; 
-
-                    DrawTextureEx(*tex, pos, rot, scale, WHITE);
-                } 
-            }
         });
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
