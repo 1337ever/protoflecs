@@ -67,11 +67,9 @@ struct Col_Layer {
 
 //render layer
 struct R_Layer {
-    int layer;
+    int layer = 0;
+    bool sorted = false;
 };
-
-//tag component indicating the attached entity has already been sorted into the sprite layering system
-struct Sorted {};
 
 int main() {
     flecs::world ecs;
@@ -121,6 +119,7 @@ int main() {
         .set<C_Texture>({&t_octophant})
         //.is_a(it_octophant)
         .set<R_Layer>({0})
+        //.set<Sorted>({false})
         .add<Player>();
 
     auto evilophant = ecs.entity()
@@ -131,6 +130,7 @@ int main() {
         .set<C_Texture>({&t_evilophant})
         //.is_a(it_evilophant)
         .set<R_Layer>({1})
+        //.set<Sorted>({false})
         .add<Enemy>();
 
     //auto e2 = ecs.entity().is_a(evilophant);
@@ -139,27 +139,22 @@ int main() {
     //awesome array of vectors, yeah i manage memory, yeah i go fastish
     std::vector<flecs::entity> drawables[MAX_RENDER_LAYERS];
     //getting a pointer == optional component?
-    auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, C_Texture, const R_Layer>()
+    auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, const C_Texture, R_Layer>()
         .kind(flecs::OnUpdate)
-        .iter([&drawables](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, C_Texture *t, const R_Layer *l) {
-            //DrawTextureEx(t.tex, p.pos, r.rot, s.scale, WHITE);
-            //flecs::entity drawables[it.count()];
+        .iter([&drawables](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, const C_Texture *t, R_Layer *l) {
 
-
-            //for (auto i : it) {
+            //still have to check every entity to see if its sorted, this should prob be in a diff system and run less often than every frame
             for (size_t i = 0; i < it.count(); i ++) {
-                //if (drawables[l[i].layer] != it.entity(i))
-                printf("inserting layer %d\t", l[i].layer);
-                drawables[l[i].layer].push_back(it.entity(i));
+                auto sort = it.entity(i).get_mut<R_Layer>();
+                if (!sort->sorted) {
+                    drawables[l[i].layer].push_back(it.entity(i));
+                    sort->sorted = true;
+                }
             }
             
-            printf("\n");
             for (int v = MAX_RENDER_LAYERS-1; v >=  0; v--) {
-                printf("%d\n", v);
-                //printf("drawing layer: %d\n", v);
                 for (int d = 0; d < drawables[v].size(); d++) {
                     flecs::entity e =  drawables[v][d];
-                    printf("drawing entity: %d on layer %d\n", d, v);
                     auto tex = e.get_ref<C_Texture>()->tex;
                     auto pos = e.get_ref<Position>()->pos;
                     auto rot = e.get_ref<Rotation>()->rot;
@@ -169,28 +164,6 @@ int main() {
                 } 
             }
         });
-/*
-    auto sys_draw_object = ecs.system<const Position, const Scale, const Rotation, C_Texture, const R_Layer>()
-        .kind(flecs::OnUpdate)
-        .iter([&drawables](flecs::iter& it, const Position *p, const Scale *s, const Rotation *r, C_Texture *t, const R_Layer *l) {
-            //DrawTextureEx(t.tex, p.pos, r.rot, s.scale, WHITE);
-            //flecs::entity drawables[it.count()];
-
-            for (int v = MAX_RENDER_LAYERS-1; v >=  0; v--) {
-                //printf("%d\n", v);
-                //printf("drawing layer: %d\n", v);
-                for (int d = 0; d < drawables[v].size(); d++) {
-                    flecs::entity e =  drawables[v][d];
-                    //printf("drawing entity: %d on layer %d\n", d, v);
-                    auto tex = e.get_ref<C_Texture>()->tex;
-                    auto pos = e.get_ref<Position>()->pos;
-                    auto rot = e.get_ref<Rotation>()->rot;
-                    auto scale = e.get_ref<Scale>()->scale; 
-
-                    DrawTextureEx(*tex, pos, rot, scale, WHITE);
-                } 
-            }
-        });*/
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
         .each([](Velocity& v, Damping& d, const Speed& s, const Player& p) {
@@ -243,9 +216,6 @@ int main() {
             DrawText(TextFormat("x: %g, y: %g", player.get<Position>()->pos.x, player.get<Position>()->pos.y), 100, 10, 20, GRAY);
             DrawText(TextFormat("vel.x: %g, vel.y: %g", player.get<Velocity>()->vel.x, player.get<Velocity>()->vel.y), 100, 35, 20, GRAY);
         EndDrawing();
-        //EndTextureMode();
-
-        //DrawTextureRec(target.texture, (Rectangle){ 0, 0, (float)target.texture.width, (float)-target.texture.height }, (Vector2){ 0, 0 }, WHITE);
     }
 
     //cleanup textures
