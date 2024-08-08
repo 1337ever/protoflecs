@@ -1,3 +1,6 @@
 [submodule "flecs"]
     path = subprojects/flecs
     url = https://github.com/SanderMertens/flecs
+[submodule "subprojects/reasings"]
+	path = subprojects/reasings
+	url = https://github.com/raylib-extras/reasings

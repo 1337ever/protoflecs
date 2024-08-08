@@ -3,6 +3,7 @@
 
 #include <flecs.h>
 #include <raylib.h>
+#include <subprojects/reasings/src/reasings.h>
 
 #include "defines.h"
 #include "aabb.cpp"
@@ -12,8 +13,10 @@ struct Player {};
 
 struct Enemy {};
 
+struct Octophant {};
+
 struct Health {
-    int health;
+    int health = 100;
 };
 
 struct Speed {
@@ -21,11 +24,11 @@ struct Speed {
 };
 
 struct Position {
-	Vector2 pos;
+	Vector2 pos = Vector2{0, 0};
 };
 
 struct Velocity {
-	Vector2 vel;
+	Vector2 vel = Vector2{0, 0};
     float max;
 };
 
@@ -36,7 +39,7 @@ struct Damping {
 };
 
 struct C_Color {
-    Color color;
+    Color color = RED;
 };
 
 struct C_Texture {
@@ -48,11 +51,11 @@ struct I_Texture {
 };
 
 struct Scale {
-    float scale;
+    float scale = 1.0f;
 };
 
 struct Rotation {
-    float rot;
+    float rot = 0.0f;
 };
 
 //square colliders only!!
@@ -62,7 +65,7 @@ struct Collider {
 
 //collision layer
 struct Col_Layer {
-    int layer;
+    int z = 1;
 };
 
 //render layer
@@ -100,6 +103,13 @@ int main() {
             p.pos.y += v.vel.y * delta;
         });
 
+    auto anim_octophant = ecs.system<const Velocity, Rotation>()
+        .with<Octophant>()
+        .each([](const Velocity& v, Rotation& r) {
+            float maxrot = 10.0f; //in degrees
+            r.rot = Remap(v.vel.x, -v.max, v.max, -maxrot, maxrot);
+        });
+
     auto sys_damp = ecs.system<Velocity, const Damping>()
         .each([](Velocity& v, const Damping& d) {
             float delta = GetFrameTime();
@@ -128,29 +138,34 @@ int main() {
         .set<C_Texture>({&t_octophant})
         //.is_a(it_octophant)
         .set<R_Layer>({0})
-        //.set<Sorted>({false})
-        .add<Player>();
+        .add<Player>()
+        .add<Octophant>();
 
     auto evilophant = ecs.entity()
         .set<Position>({100, 100})
         .set<Scale>({3})
-        .set<Rotation>({0})
-        .set<Velocity>({{10, 10}, 350})
+        .set<Rotation>({0.0})
+        .set<Velocity>({{20, 10}, 350})
         .set<C_Texture>({&t_evilophant})
         //.is_a(it_evilophant)
         .set<R_Layer>({1})
-        //.set<Sorted>({false})
-        .add<Enemy>();
+        .add<Enemy>()
+        .add<Octophant>();
 
     //auto e2 = ecs.entity().is_a(evilophant);
     //e2.set<Position>({500, 500});
     
     //getting a pointer == optional component?
-    auto sys_sort_drawables = ecs.system<const Position, const Scale, const Rotation, const C_Texture, const R_Layer>()
+    auto sys_draw_sorted = ecs.system<const Position, const Scale, const Rotation, const C_Texture, const R_Layer>()
         .kind(flecs::OnUpdate)
         .order_by<R_Layer>(layer_compare) //absolute life saver
         .each([](const Position& p, const Scale& s, const Rotation& r, const C_Texture& t, const R_Layer& l) {
-            DrawTextureEx(*t.tex, p.pos, r.rot, s.scale, WHITE);
+            //DrawTextureEx(*t.tex, p.pos, r.rot, s.scale, WHITE);
+
+            int nw = t.tex->width;
+            int nh = t.tex->height;
+            DrawTexturePro(*t.tex, {0.0f, 0.0f, (float)nw, (float)nh}, {p.pos.x, p.pos.y, nw*s.scale, nh*s.scale}, {(nw*s.scale)/2, (nh*s.scale)/2}, r.rot, WHITE);
+            //use drawtexturepro to shift origin
         });
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
