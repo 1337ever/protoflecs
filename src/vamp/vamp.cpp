@@ -3,6 +3,7 @@
 
 #include <flecs.h>
 #include <raylib.h>
+#include <raymath.h>
 #include <subprojects/reasings/src/reasings.h>
 
 #include "defines.h"
@@ -86,7 +87,7 @@ static inline int layer_compare(flecs::entity_t e1, const R_Layer* l1, flecs::en
 int main() {
     flecs::world ecs;
     ecs.set_threads(4);
-    
+
     #ifdef ENABLE_REST
     ecs.set<flecs::Rest>({});
     ecs.import<flecs::monitor>();
@@ -145,7 +146,7 @@ int main() {
         .set<Position>({100, 100})
         .set<Scale>({3})
         .set<Rotation>({0.0})
-        .set<Velocity>({{20, 10}, 350})
+        .set<Velocity>({{1, 1}, 350})
         .set<C_Texture>({&t_evilophant})
         //.is_a(it_evilophant)
         .set<R_Layer>({1})
@@ -154,18 +155,24 @@ int main() {
 
     //auto e2 = ecs.entity().is_a(evilophant);
     //e2.set<Position>({500, 500});
-    
-    //getting a pointer == optional component?
+
     auto sys_draw_sorted = ecs.system<const Position, const Scale, const Rotation, const C_Texture, const R_Layer>()
         .kind(flecs::OnUpdate)
         .order_by<R_Layer>(layer_compare) //absolute life saver
         .each([](const Position& p, const Scale& s, const Rotation& r, const C_Texture& t, const R_Layer& l) {
-            //DrawTextureEx(*t.tex, p.pos, r.rot, s.scale, WHITE);
-
             int nw = t.tex->width;
             int nh = t.tex->height;
             DrawTexturePro(*t.tex, {0.0f, 0.0f, (float)nw, (float)nh}, {p.pos.x, p.pos.y, nw*s.scale, nh*s.scale}, {(nw*s.scale)/2, (nh*s.scale)/2}, r.rot, WHITE);
-            //use drawtexturepro to shift origin
+        });
+
+    //ai generated nonsense here. come up with an idiomatic way to get the enemy to follow the player
+    auto sys_move_enemy = ecs.system<const Position, Velocity, const Enemy>()
+        .each([&player](const Position& p, Velocity& v, const Enemy& e) {
+            const Vector2 p_pos = player.get<Position>()->pos;
+            //these functions look uggo
+            Vector2 dir = Vector2Multiply(Vector2Normalize(Vector2Subtract(p_pos, p.pos)), {200., 200.});
+            v.vel = dir;
+
         });
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
@@ -207,9 +214,7 @@ int main() {
             }
         });
 
-    //RenderTexture2D target = LoadRenderTexture(W_WIDTH, W_HEIGHT);
     while(!WindowShouldClose()) {
-       // BeginTextureMode(target);
         BeginDrawing();
             ClearBackground(RAYWHITE);
             ecs.progress(GetFrameTime());
