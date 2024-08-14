@@ -2,6 +2,8 @@
 
 //#define ENABLE_REST
 
+//#define DRAW_COLLIDERS
+
 #define W_WIDTH 1920
 #define W_HEIGHT 1000
 

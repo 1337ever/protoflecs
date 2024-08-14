@@ -5,6 +5,7 @@
 - enemy ai and health and spawner etc
 - sword and sword controls
 - collisions
+- transform component so scale etc doesnt have to be hardcoded in areas
 - upgrades and upgrade ui
 - skateboard upgrade
 - combo ui
