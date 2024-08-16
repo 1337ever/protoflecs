@@ -4,7 +4,11 @@
 #include <flecs.h>
 #include <raylib.h>
 #include <raymath.h>
-#include <subprojects/reasings/src/reasings.h>
+
+#include "subprojects/reasings/src/reasings.h"
+
+#include "subprojects/rlImGui/rlImGui.h"
+#include "subprojects/rlImGui/imgui-master/imgui.h"
 
 #include "defines.h"
 #include "aabb.cpp"
@@ -84,6 +88,7 @@ static inline int layer_compare(flecs::entity_t e1, const R_Layer* l1, flecs::en
     return 0;
   }
 }
+
 std::vector<Vector2> get_corners(Rectangle rect) {
     std::vector<Vector2> ret = {};
     ret.push_back(Vector2{rect.x, rect.y});
@@ -91,6 +96,16 @@ std::vector<Vector2> get_corners(Rectangle rect) {
     ret.push_back(Vector2{rect.x, rect.y + rect.height});
     ret.push_back(Vector2{rect.x + rect.width + rect.width, rect.y});
 
+    return ret;
+}
+
+
+Vector2* get_corners_ptr(Rectangle rect) {
+    static Vector2 ret[4];
+    ret[0] = Vector2{rect.x, rect.y};
+    ret[1] = Vector2{rect.x+rect.width, rect.y};
+    ret[2] = Vector2{rect.x, rect.y + rect.height};
+    ret[3] = Vector2{rect.x + rect.width + rect.width, rect.y};
     return ret;
 }
 
@@ -114,6 +129,8 @@ int main() {
 
     //SetTargetFPS(1);
     InitWindow(W_WIDTH, W_HEIGHT, "Octophant Scimitar");
+
+    rlImGuiSetup(true);
 
     //todo: not have to manually load every texture in code
     auto t_octophant = LoadTexture("../resources/vamp/char1.png");
@@ -189,8 +206,8 @@ int main() {
                                         v.x = cornerListB[oppositecornerindex].x - cornerListA[oppositecornerindex].x;
                                         v.y = cornerListB[oppositecornerindex].y - cornerListA[oppositecornerindex].y;
 
-                                        pos1.pos.x -= v.x/3/100;
-                                        pos1.pos.y -= v.y/3/100;
+                                        pos1.pos.x -= v.x/3/10;
+                                        pos1.pos.y -= v.y/3/10;
                                         //pos2.pos.x += v.x/3/2;
                                         //pos2.pos.y += v.y/3/2;
                                     }
@@ -313,16 +330,20 @@ int main() {
             }
         });
 
-    int count = 2;
+    int count = 0;
+    int total = 0;
     while(!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(RAYWHITE);
+
+            rlImGuiBegin();
+
             ecs.progress(GetFrameTime());
 
             //spawn an evilophant in a random location every 5 seconds
             //todo: make them spawn offscreen
-            bool spawn = (int)GetTime() % (int)2.0 ? false : true;
-            if(spawn && count < 1) {
+            bool spawn = (int)GetTime() % (int)5.0 ? false : true;
+            if(spawn && count < 10) {
                 ecs.entity()
                         .set<Position>({(float)GetRandomValue(0, 1000), (float)GetRandomValue(0, 1000)})
                         .set<Scale>({3})
@@ -337,6 +358,7 @@ int main() {
                         .add<Enemy>()
                         .add<Octophant>();
                 count++;
+                total++;
             } else if (!spawn) {
                 count = 0;
             }
@@ -344,6 +366,9 @@ int main() {
             DrawFPS(10, 10);
             DrawText(TextFormat("x: %g, y: %g", player.get<Position>()->pos.x, player.get<Position>()->pos.y), 100, 10, 20, GRAY);
             //DrawText(TextFormat("vel.x: %g, vel.y: %g", player.get<Velocity>()->vel.x, player.get<Velocity>()->vel.y), 100, 35, 20, GRAY);
+            DrawText(TextFormat("enemies: %u", total), 100, 35, 20, GRAY);
+
+            rlImGuiEnd();
         EndDrawing();
     }
 
@@ -352,6 +377,7 @@ int main() {
         UnloadTexture(*t.tex);
     });
 
+    rlImGuiShutdown();
     CloseWindow();
 
     return 0;
