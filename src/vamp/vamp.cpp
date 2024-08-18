@@ -130,7 +130,9 @@ int main() {
     //SetTargetFPS(1);
     InitWindow(W_WIDTH, W_HEIGHT, "Octophant Scimitar");
 
+    #ifdef DEBUG_UI
     rlImGuiSetup(true);
+    #endif
 
     //todo: not have to manually load every texture in code
     auto t_octophant = LoadTexture("../resources/vamp/char1.png");
@@ -151,7 +153,7 @@ int main() {
 
     //sync collider positions, annoying this is separate
     auto sys_sync_colliders = ecs.system<const Position, Collider, const Scale>()
-        //.multi_threaded()
+        .multi_threaded()
         .each([](const Position& p, Collider& c, const Scale& s) {
             float half_width = (c.box.width)/2;
             float half_height = (c.box.height)/2;
@@ -160,18 +162,16 @@ int main() {
         });
 
     auto sys_vel = ecs.system<Position, const Velocity>()
-        //.multi_threaded()
-        .each([](Position& p, const Velocity& v) {
-            float delta = GetFrameTime();
+        .multi_threaded()
+        .each([&ecs](Position& p, const Velocity& v) {
+            float delta = ecs.delta_time();
             p.pos.x += v.vel.x * delta;
             p.pos.y += v.vel.y * delta;
         });
 
-    auto query_sub_collision = ecs.query<Position, Collider>();
-
     auto sys_collision_resolve = ecs.system<Position, Collider>()
         .multi_threaded()
-        .kind(flecs::OnUpdate)
+        //.kind(flecs::OnUpdate)
         //this double .each syntax scares me so much i have no idea why.... vvvv
         .each([&ecs](flecs::entity e1, Position& pos1, Collider& col1) {
             //this `.each` doesn't accept `<Position, Collider>`. Oh well
@@ -206,8 +206,17 @@ int main() {
                                         v.x = cornerListB[oppositecornerindex].x - cornerListA[oppositecornerindex].x;
                                         v.y = cornerListB[oppositecornerindex].y - cornerListA[oppositecornerindex].y;
 
-                                        pos1.pos.x -= v.x/3/10;
-                                        pos1.pos.y -= v.y/3/10;
+                                        float mag = 40;
+                                        float delta = ecs.delta_time();
+
+                                        //todo: replace 3 with scale
+                                        pos1.pos.x -= ((v.x/3)*mag)*delta;
+                                        pos1.pos.y -= ((v.y/3)*mag)*delta;
+
+                                        #ifdef DUAL_RESTITUTION
+                                        pos2.pos.x += ((v.x/3)*mag)*delta;
+                                        pos2.pos.y += ((v.y/3)*mag)*delta;
+                                        #endif
                                         //pos2.pos.x += v.x/3/2;
                                         //pos2.pos.y += v.y/3/2;
                                     }
@@ -238,9 +247,8 @@ int main() {
 
     auto sys_damp = ecs.system<Velocity, const Damping>()
         .multi_threaded()
-        .each([](Velocity& v, const Damping& d) {
-            float delta = GetFrameTime();
-            float damp = d.damp * delta;
+        .each([&ecs](Velocity& v, const Damping& d) {
+            float damp = d.damp * ecs.delta_time();
 
             v.vel.x -= damp * v.vel.x;
             v.vel.y -= damp * v.vel.y;
@@ -284,6 +292,7 @@ int main() {
         });
 
     auto sys_move_enemy = ecs.system<const Position, Velocity, const Speed, const Enemy>()
+        .multi_threaded()
         .each([&player](const Position& p, Velocity& v, const Speed& s, const Enemy& e) {
             const Vector2 p_pos = player.get<Position>()->pos;
             //these functions look uggo
@@ -292,6 +301,7 @@ int main() {
         });
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
+        .multi_threaded()
         .each([](Velocity& v, Damping& d, const Speed& s, const Player& p) {
             float delta = GetFrameTime();
             float speed = s.speed * delta;
@@ -332,18 +342,21 @@ int main() {
 
     int count = 0;
     int total = 0;
+    int evil_per_check = 1;
+    int interval = 5;
     while(!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(RAYWHITE);
 
-            rlImGuiBegin();
+            //SetTargetFPS(600);
+
 
             ecs.progress(GetFrameTime());
 
             //spawn an evilophant in a random location every 5 seconds
             //todo: make them spawn offscreen
-            bool spawn = (int)GetTime() % (int)5.0 ? false : true;
-            if(spawn && count < 10) {
+            bool spawn = (int)GetTime() % interval ? false : true;
+            if(spawn && count < evil_per_check) {
                 ecs.entity()
                         .set<Position>({(float)GetRandomValue(0, 1000), (float)GetRandomValue(0, 1000)})
                         .set<Scale>({3})
@@ -363,21 +376,35 @@ int main() {
                 count = 0;
             }
 
+            #ifdef DEBUG_UI
+            rlImGuiBegin();
+
+            ImGui::Begin("spawn dialog");
+            ImGui::SliderInt("spawn interval", &interval, 1, 25);
+            ImGui::SliderInt("# of evilophants", &evil_per_check, 0, 256);
+            ImGui::End();
+
             DrawFPS(10, 10);
             DrawText(TextFormat("x: %g, y: %g", player.get<Position>()->pos.x, player.get<Position>()->pos.y), 100, 10, 20, GRAY);
             //DrawText(TextFormat("vel.x: %g, vel.y: %g", player.get<Velocity>()->vel.x, player.get<Velocity>()->vel.y), 100, 35, 20, GRAY);
             DrawText(TextFormat("enemies: %u", total), 100, 35, 20, GRAY);
 
             rlImGuiEnd();
+            #endif
+
         EndDrawing();
     }
 
     //cleanup textures
+    //idk if its okay to try to unload the same pointer a hundred times, it seems to work though
     ecs.each([](C_Texture& t) {
         UnloadTexture(*t.tex);
     });
 
+    #ifdef DEBUG_UI
     rlImGuiShutdown();
+    #endif
+
     CloseWindow();
 
     return 0;

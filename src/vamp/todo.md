@@ -2,6 +2,7 @@
 - ~~character controller~~
 - ~~refine character controller to allow fast movements back and forth~~ kinda half done
 - ~~render sorter~~
+- camera
 - enemy ai and health and spawner etc
 - sword and sword controls
 - collisions
