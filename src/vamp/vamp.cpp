@@ -1,5 +1,9 @@
 #include <algorithm>
+#include <cstdio>
 #include <vector>
+#include <string>
+#include <unordered_map>
+#include <format>
 
 #include <flecs.h>
 #include <raylib.h>
@@ -16,12 +20,22 @@
 
 struct Player {};
 
-struct Enemy {};
+struct Enemy {}; //runs toward and attacks player
 
 struct Octophant {};
 
+struct Afraid {}; //runs away from player
+
+struct Ephemeral {
+    float buffer = 32;
+}; //despawns if out of bounds by buffer degree
+
 struct Health {
     int health = 100;
+};
+
+struct Emitter {
+    float rate = 0.5;
 };
 
 struct Speed {
@@ -47,14 +61,6 @@ struct C_Color {
     Color color = RED;
 };
 
-struct C_Texture {
-    Texture2D* tex;
-};
-
-struct I_Texture {
-    Texture2D tex;
-};
-
 struct Scale {
     float scale = 1.0f;
 };
@@ -62,6 +68,7 @@ struct Scale {
 struct Rotation {
     float rot = 0.0f;
 };
+
 
 enum Collision {left, right, top, bottom};
 
@@ -77,6 +84,14 @@ struct Collider {
 //render layer
 struct R_Layer {
     int z = 1;
+};
+
+struct C_Texture { //raw pointer texture component, deprecated
+    Texture2D* tex;
+};
+
+struct S_Texture { //lazy loaded texture component
+    const char * path;
 };
 
 static inline int layer_compare(flecs::entity_t e1, const R_Layer* l1, flecs::entity_t e2, const R_Layer* l2) {
@@ -134,10 +149,26 @@ int main() {
     rlImGuiSetup(true);
     #endif
 
+    //initialize lazy texture library
+    std::unordered_map<const char *, Texture2D> TextureLibrary;
+
     //todo: not have to manually load every texture in code
+    /*
     auto t_octophant = LoadTexture("../resources/vamp/char1.png");
     auto t_evilophant = LoadTexture("../resources/vamp/evilophant.png");
+    auto t_healophant = LoadTexture("../resources/vamp/healophant.png");
+
     auto t_heart = LoadTexture("../resources/vamp/heart.png");
+    auto t_scimi = LoadTexture("../resources/vamp/scimi2.png");
+    */
+
+    /*
+    auto sys_lazy_load_textures = ecs.system<const S_Texture>()
+        .multi_threaded()
+        .each([&TextureLibrary](flecs::entity e1, const S_Texture& st) {
+
+        });
+        */
 
     #ifdef DRAW_COLLIDERS
     auto sys_draw_colliders = ecs.system<const Collider, const Position, const Scale>()
@@ -176,7 +207,7 @@ int main() {
         .each([&ecs](flecs::entity e1, Position& pos1, Collider& col1) {
             //this `.each` doesn't accept `<Position, Collider>`. Oh well
             ecs.each<Collider>([&](flecs::entity e2, Collider& col2) {
-                //> prevents double-processing a pair of objects
+                //v prevents double-processing a pair of objects
                 if (e1.id() > e2.id()) {
                     if (col1.layer == col2.layer) {
                         if (CheckCollisionRecs(col1.box, col2.box)) {
@@ -264,7 +295,8 @@ int main() {
         .set<Velocity>({{0, 0}, 350})
         .set<Damping>({0, 5})
         .set<Speed>({5000})
-        .set<C_Texture>({&t_octophant})
+        //.set<C_Texture>({&t_octophant})
+        .set<S_Texture>({"../resources/vamp/char1.png"})
         //.is_a(it_octophant)
         .set<R_Layer>({1})
         //.set<Collider>({{-8, 8, -8, 8}})
@@ -272,23 +304,66 @@ int main() {
         .add<Player>()
         .add<Octophant>();
 
+    auto healophant = ecs.entity()
+        .set<Position>({W_WIDTH/2, W_HEIGHT/2})
+        .set<Scale>({3})
+        .set<Rotation>({0})
+        .set<Velocity>({{0, 0}, 350})
+        .set<Damping>({0, 5})
+        .set<Speed>({200})
+        //.set<C_Texture>({&t_healophant})
+        .set<S_Texture>({"../resources/vamp/healophant.png"})
+        //.is_a(it_octophant)
+        .set<R_Layer>({1})
+        //.set<Collider>({{-8, 8, -8, 8}})
+        .set<Collider>({{0, 0, 16*3, 16*3}})
+        .add<Afraid>()
+        .add<Ephemeral>()
+        .add<Octophant>();
+
     auto heart = ecs.entity()
         .set<Position>({W_WIDTH*0.5, 32*3})
         .set<Scale>({5})
         .set<Rotation>({0})
-        .set<C_Texture>({&t_heart})
+        //.set<C_Texture>({&t_heart})
+        .set<S_Texture>({"../resources/vamp/heart.png"})
         .set<R_Layer>({0});
 
+    auto scimi = ecs.entity()
+        .set<Position>({W_WIDTH/2, W_HEIGHT/2})
+        .set<Scale>({3})
+        .set<Rotation>({0})
+        //.set<C_Texture>({&t_scimi})
+        .set<S_Texture>({"../resources/vamp/scimi2.png"})
+        .set<Collider>({{0, 0, 16*3, 16*3}, false})
+        .set<R_Layer>({0});
     //auto e2 = ecs.entity().is_a(evilophant);
     //e2.set<Position>({500, 500});
 
-    auto sys_draw_sorted = ecs.system<const Position, const Scale, const Rotation, const C_Texture, const R_Layer>()
+    //insert textures into texture library. multithreaded and separated from draw_sorted
+    //to run faster than Update and avoid map lookups every time something needs to be drawn.
+    //if these two systems are out of sync, then the entity just gets drawn without a sprite
+    //("blank") until it is loaded. hence, lazy loading.
+    auto sys_lazy_load = ecs.system<const S_Texture>()
+        .multi_threaded()
+        .each([&TextureLibrary](const S_Texture& st) {
+            if (TextureLibrary.find(st.path) == TextureLibrary.end()) {
+                printf("lazy loading texture %s\n", st.path);
+                auto t_load = LoadTexture(st.path);
+                //auto t_load = LoadTexture(TEX(st.path));
+                TextureLibrary[st.path] = t_load;
+            }
+        });
+
+    auto sys_draw_sorted = ecs.system<const Position, const Scale, const Rotation, const S_Texture, const R_Layer>()
         .kind(flecs::OnUpdate)
         .order_by<R_Layer>(layer_compare) //absolute life saver
-        .each([](const Position& p, const Scale& s, const Rotation& r, const C_Texture& t, const R_Layer& l) {
-            int nw = t.tex->width;
-            int nh = t.tex->height;
-            DrawTexturePro(*t.tex, {0.0f, 0.0f, (float)nw, (float)nh}, {p.pos.x, p.pos.y, nw*s.scale, nh*s.scale}, {(nw*s.scale)/2, (nh*s.scale)/2}, r.rot, WHITE);
+        .each([&TextureLibrary](const Position& p, const Scale& s, const Rotation& r, const S_Texture& st, const R_Layer& l) {
+            Texture2D* tex = &TextureLibrary[st.path];
+
+            int nw = tex->width;
+            int nh = tex->height;
+            DrawTexturePro(*tex, {0.0f, 0.0f, (float)nw, (float)nh}, {p.pos.x, p.pos.y, nw*s.scale, nh*s.scale}, {(nw*s.scale)/2, (nh*s.scale)/2}, r.rot, WHITE);
         });
 
     auto sys_move_enemy = ecs.system<const Position, Velocity, const Speed, const Enemy>()
@@ -298,6 +373,33 @@ int main() {
             //these functions look uggo
             Vector2 dir = Vector2Multiply(Vector2Normalize(Vector2Subtract(p_pos, p.pos)), {s.speed, s.speed});
             v.vel = dir;
+        });
+
+    auto sys_move_afraid = ecs.system<const Position, Velocity, const Speed, const Afraid>()
+        .multi_threaded()
+        .each([&player](const Position& p, Velocity& v, const Speed& s, const Afraid& a) {
+            const Vector2 p_pos = player.get<Position>()->pos;
+            //these functions look uggo
+            Vector2 dir = Vector2Multiply(Vector2Normalize(Vector2Subtract(p_pos, p.pos)), {s.speed, s.speed});
+            v.vel = Vector2Multiply(dir, Vector2{-1, -1});
+        });
+
+    auto sys_despawn_ephemeral = ecs.system<const Position, const Ephemeral>()
+        .multi_threaded()
+        .each([](flecs::entity e1, const Position& p, const Ephemeral& e) {
+            if (p.pos.x < 0 - e.buffer) {
+                e1.destruct();
+            }
+            if (p.pos.x > B_WIDTH + e.buffer) {
+                e1.destruct();
+            }
+            if (p.pos.y > B_HEIGHT + e.buffer) {
+                e1.destruct();
+            }
+            if (p.pos.y < 0 - e.buffer) {
+                e1.destruct();
+            }
+            //printf("destructing entity %s\n", e1);
         });
 
     auto sys_character_controller = ecs.system<Velocity, Damping, const Speed, const Player>()
@@ -363,12 +465,14 @@ int main() {
                         .set<Rotation>({0.0})
                         .set<Velocity>({{0, 0}, 350})
                         .set<Speed>({200})
-                        .set<C_Texture>({&t_evilophant})
+                        //.set<C_Texture>({&t_evilophant})
+                        .set<S_Texture>({"../resources/vamp/evilophant.png"})
                         //.is_a(it_evilophant)
                         .set<R_Layer>({2})
                         //.set<Collider>({{-8, 8, -8, 8}})
                         .set<Collider>({{0, 0, 16*3, 16*3}})
                         .add<Enemy>()
+                        .set<Ephemeral>({300.})
                         .add<Octophant>();
                 count++;
                 total++;

@@ -67,7 +67,7 @@ int main() {
 		.each([](Velocity& v) {
 			v.x = std::clamp(v.x, -50.0f, 50.0f);
 		});
-
+	/*
 	ecs.entity()
 		.set<ecsColor>({MAGENTA})
 		.set<Position>({10, 20})
@@ -77,28 +77,29 @@ int main() {
 		.set<ecsColor>({MAROON})
 		.set<Position>({10, 20})
 		.set<Velocity>({3, 4});
-	
+
 	ecs.entity()
 		.set<ecsColor>({GREEN})
 		.set<Position>({100, 100})
 		.set<Velocity>({1, 0});
-	
+
 	ecs.entity()
 		.set<ecsColor>({BLUE})
 		.set<Position>({50, 50})
 		.set<Velocity>({0, 0})
 		.add<Paddle>();
+		*/
 
 	flecs::query<const Position, const ecsColor> q = ecs.query<const Position, const ecsColor>();
 
-	
+
 
 	//SetTargetFPS(60);
 	InitWindow(WIN_WIDTH, WIN_HEIGHT, "raylib test");
 
 	//Shader shader = LoadShader(0, TextFormat("../pixelizer.fs", 330));
 	Shader shader_pix = LoadShader(0, TextFormat("../pixelizer.fs", 330));
-	Shader shader_scan = LoadShader(0, TextFormat("../scanlines.fs", 330));
+	//Shader shader_scan = LoadShader(0, TextFormat("../scanlines.fs", 330));
 
 	RenderTexture2D target = LoadRenderTexture(WIN_WIDTH, WIN_HEIGHT);
 	while(!WindowShouldClose() && ecs.progress()) {
@@ -108,8 +109,8 @@ int main() {
 			ClearBackground(RAYWHITE);
 
 
-			DrawText("This is a test window", 190, 200, 20, LIGHTGRAY);
-			
+			//DrawText("This is a test window", 190, 200, 20, LIGHTGRAY);
+
 
 			if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
 				auto mouse_pos = GetMousePosition();
@@ -123,7 +124,7 @@ int main() {
 			int entity_count = 0;
 
 			q.each([&entity_count](const Position& p, const ecsColor& c) {
-				DrawCircleV({p.x, p.y}, 20.0, {c.color.a, static_cast<unsigned char>(c.color.b+static_cast<char>(p.x)), static_cast<unsigned char>(c.color.g+static_cast<char>(p.y)), c.color.r});
+				DrawCircleV({p.x, p.y}, 10.0, {c.color.a, static_cast<unsigned char>(c.color.b+static_cast<char>(p.x)), static_cast<unsigned char>(c.color.g+static_cast<char>(p.y)), c.color.r});
 				entity_count += 1;
 			});
 		EndTextureMode();
@@ -143,7 +144,7 @@ int main() {
 	}
 
 	UnloadShader(shader_pix);
-	UnloadShader(shader_scan);
+	//UnloadShader(shader_scan);
 	UnloadRenderTexture(target);
 
 	CloseWindow();
