@@ -150,8 +150,9 @@ std::vector<Collision> check_collision(Rectangle c1, Rectangle c2) {}
 
 int main() {
   flecs::world ecs;
-  // surely
-  ecs.set_threads(8);
+
+  // vvvv for some reason this causes a really hard to diagnose runtime error
+  //ecs.set_threads(4);
 
 #ifdef ENABLE_REST
   ecs.set<flecs::Rest>({});
@@ -260,7 +261,7 @@ int main() {
       });
 
   auto sys_process_particles = ecs.system<Opacity>().with<Particle>().each(
-      [&ecs](flecs::entity e1, Opacity &o, Lifetime &lf, Time &t) {
+      [&ecs](flecs::entity e1, Opacity &o) {
         if (o.alpha <= 0) {
           e1.destruct();
         } else {
