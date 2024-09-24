@@ -25,7 +25,9 @@ struct Paddle { };
 int main() {
 	flecs::world ecs;
 
+	ecs.set_threads(8);
 	ecs.system<Position, const Velocity>()
+	   .multi_threaded()
 		.each([](Position& p, const Velocity& v) {
 			p.x += v.x;
 			p.y += v.y;

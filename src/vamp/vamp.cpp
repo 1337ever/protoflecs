@@ -250,8 +250,8 @@ int main() {
                   .set<Velocity>({{0, 0}, 350})
                   .set<Damping>({0, 0})
                   .add<Particle>()
-                  .set<Lifetime>({e.lifetime})
-                  .add<Time>()
+                  //.set<Lifetime>({e.lifetime})
+                  //.add<Time>()
                   // vvv this doesnt really work
                   //.set<Collider>({{0, 0, 5 * 3, 5 * 3}, true, 1})
                   .set<Scale>({static_cast<float>(
@@ -509,13 +509,9 @@ int main() {
   int total = 0;
   int evil_per_check = 1;
   int interval = 5;
-  while (!WindowShouldClose()) {
+  while (!WindowShouldClose() && ecs.progress(GetFrameTime())) {
     BeginDrawing();
     ClearBackground(RAYWHITE);
-
-    // SetTargetFPS(60);
-
-    ecs.progress(GetFrameTime());
 
     // spawn an evilophant in a random location every 5 seconds
     // todo: make them spawn offscreen
