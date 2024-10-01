@@ -2,7 +2,7 @@
 
 //#define ENABLE_REST
 
-#define DRAW_COLLIDERS
+//#define DRAW_COLLIDERS
 #define DEBUG_UI
 
 #define DUAL_RESTITUTION

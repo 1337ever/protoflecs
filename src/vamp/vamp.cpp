@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 #include <vector>
 
@@ -15,144 +16,20 @@
 
 #include "aabb.cpp"
 #include "defines.h"
+#include "helpers/physics.h"
+#include "helpers/math.h"
+
+#include "components/particles.h"
+#include "components/octophant.h"
+#include "components/physics.h"
+#include "components/textures.h"
 // #include "textures.cpp"
-
-struct Player {};
-
-struct Enemy {}; // runs toward and attacks player
-
-struct Octophant {};
-
-struct Afraid {}; // runs away from player
-
-struct Ephemeral {
-  float buffer = 32;
-}; // despawns if out of bounds by buffer degree
-
-struct Health {
-  int health = 100;
-};
-
-struct Emitter {
-  const char *icon = "../resources/vamp/particles/heart.png";
-  float rate = 0.1;
-  float lifetime = 0.5;
-  float r_spread = 30.;
-  float r_rot = 10.;
-  float r_scale = 0.5;
-  double time = 0.; // not rlly meant to be set, just keeps track of time
-};
-
-struct Emitted {};
-
-// component for holding and checking time
-struct Time {
-  double time = 0;
-};
-
-struct Lifetime {
-  double time = 0;
-};
-
-struct Particle {};
-
-struct Speed {
-  float speed;
-};
-
-struct Position {
-  Vector2 pos = Vector2{0, 0};
-};
-
-struct Velocity {
-  Vector2 vel = Vector2{0, 0};
-  float max;
-};
-
-// velocity damping, for simulating ie friction
-struct Damping {
-  float damp; // current damping
-  float def;  // default damping
-};
-
-struct C_Color {
-  Color color = RED;
-};
-
-struct Scale {
-  float scale = 1.0f;
-};
-
-struct Rotation {
-  float rot = 0.0f;
-};
-
-struct Opacity {
-  float alpha = 1.0f;
-  // unsigned char op = 255;
-};
-
-enum Collision { left, right, top, bottom };
-
-// rect colliders only!!
-struct Collider {
-  Rectangle box;
-  bool solid = true;
-  int layer = 1;
-  bool colliding = false;
-  std::vector<Collision> collisions;
-};
-
-// render layer
-struct R_Layer {
-  int z = 1;
-};
-
-struct C_Texture { // raw pointer texture component, deprecated
-  Texture2D *tex;
-};
-
-struct S_Texture { // lazy loaded texture component
-  const char *path;
-};
-
-static inline int layer_compare(flecs::entity_t e1, const R_Layer *l1,
-                                flecs::entity_t e2, const R_Layer *l2) {
-  if (l1->z < l2->z) {
-    return 1;
-  } else if (l1->z > l2->z) {
-    return -1;
-  } else {
-    return 0;
-  }
-}
-
-std::vector<Vector2> get_corners(Rectangle rect) {
-  std::vector<Vector2> ret = {};
-  ret.push_back(Vector2{rect.x, rect.y});
-  ret.push_back(Vector2{rect.x + rect.width, rect.y});
-  ret.push_back(Vector2{rect.x, rect.y + rect.height});
-  ret.push_back(Vector2{rect.x + rect.width + rect.width, rect.y});
-
-  return ret;
-}
-
-Vector2 *get_corners_ptr(Rectangle rect) {
-  static Vector2 ret[4];
-  ret[0] = Vector2{rect.x, rect.y};
-  ret[1] = Vector2{rect.x + rect.width, rect.y};
-  ret[2] = Vector2{rect.x, rect.y + rect.height};
-  ret[3] = Vector2{rect.x + rect.width + rect.width, rect.y};
-  return ret;
-}
-
-std::vector<Collision> check_collision(Rectangle c1, Rectangle c2) {}
 
 int main() {
   flecs::world ecs;
 
   // vvvv for some reason this causes a really hard to diagnose runtime error
-  //ecs.set_threads(4);
+  // ecs.set_threads(4);
 
 #ifdef ENABLE_REST
   ecs.set<flecs::Rest>({});
@@ -197,7 +74,12 @@ int main() {
                         .add<Afraid>()
                         .add<Ephemeral>()
                         .set<Emitter>({"../resources/vamp/particles/heal.png",
-                                       0.05, 0.5, 50.})
+                                       0.05,
+                                       0.5,
+                                       50.,
+                                       10.,
+                                       0.5,
+                                       {50., 50.}})
                         .add<Octophant>();
 
   auto heart = ecs.entity()
@@ -230,37 +112,47 @@ int main() {
           });
 #endif
 
-  auto sys_run_emitter = ecs.system<const Position, Emitter>().each(
-      [&ecs](const Position &p, Emitter &e) {
-        // todo: get this to not spawn a billion at a time
-        auto time = GetTime();
-        if (time - e.time >= e.rate) {
-          auto particle =
-              ecs.entity()
-                  .set<S_Texture>({e.icon})
-                  .set<Position>(
-                      {p.pos.x + GetRandomValue(-e.r_spread, e.r_spread),
-                       p.pos.y + GetRandomValue(-e.r_spread, e.r_spread)})
-                  .set<Rotation>(
-                      {static_cast<float>(GetRandomValue(-e.r_rot, e.r_rot))})
-                  .set<R_Layer>({0})
-                  .set<Opacity>({1.0f})
-                  //.add<Afraid>()
-                  .set<Speed>({700})
-                  .set<Velocity>({{0, 0}, 350})
-                  .set<Damping>({0, 0})
-                  .add<Particle>()
-                  //.set<Lifetime>({e.lifetime})
-                  //.add<Time>()
-                  // vvv this doesnt really work
-                  //.set<Collider>({{0, 0, 5 * 3, 5 * 3}, true, 1})
-                  .set<Scale>({static_cast<float>(
-                      5 + GetRandomValue(-e.r_scale, e.r_scale))});
-          e.time = time;
-        }
-      });
+  auto sys_run_emitter =
+      ecs.system<const Position, Emitter, const Velocity *>().each(
+          [&ecs](const Position &p, Emitter &e, const Velocity *v) {
+            auto time = GetTime();
+            if (time - e.time >= e.rate) {
+              // if velocity component exists, use it
+              Vector2 vel = v ? Vector2{v->vel.x, v->vel.y} : Vector2{0, 0};
+              float x =
+                  float_rand(-e.r_velocity.x - vel.x, e.r_velocity.x + vel.x);
+              float y =
+                  float_rand(-e.r_velocity.y - vel.y, e.r_velocity.y + vel.y);
 
-  auto sys_process_particles = ecs.system<Opacity>().with<Particle>().each(
+              auto particle =
+                  ecs.entity()
+                      .set<S_Texture>({e.icon})
+                      .set<Position>(
+                          {p.pos.x + GetRandomValue(-e.r_spread, e.r_spread),
+                           p.pos.y + GetRandomValue(-e.r_spread, e.r_spread)})
+                      .set<Rotation>({static_cast<float>(
+                          GetRandomValue(-e.r_rot, e.r_rot))})
+                      .set<R_Layer>({0})
+                      .set<Opacity>({1.0f})
+                      //.add<Afraid>()
+                      .set<Speed>({700})
+                      .set<Velocity>({{x, y}, 350})
+                      .set<Damping>({0, 0})
+                      .add<Particle>()
+                      // vv this breaks when multithreading
+                      // i think because the particles are being deleted
+                      // and i'm not checking .is_alive before trying to access data
+                      //.set<Lifetime>({e.lifetime})
+                      //.add<Time>()
+                      // vvv this doesnt really work
+                      //.set<Collider>({{0, 0, 5 * 3, 5 * 3}, true, 1})
+                      .set<Scale>({static_cast<float>(
+                          3 + GetRandomValue(-e.r_scale, e.r_scale))});
+              e.time = time;
+            }
+          });
+
+  auto sys_process_particles = ecs.system<Opacity>().with<const Particle>().each(
       [&ecs](flecs::entity e1, Opacity &o) {
         if (o.alpha <= 0) {
           e1.destruct();
@@ -387,7 +279,7 @@ int main() {
       [&TextureLibrary](flecs::entity e1, const S_Texture &st) {
         // if texture not loaded, load it into the library
         if (TextureLibrary.find(st.path) == TextureLibrary.end()) {
-          printf("lazy loading texture %s\n", st.path);
+          printf("lazy loading texture @%s\n", st.path);
           TextureLibrary[st.path] = LoadTexture(st.path);
         }
         // insert a new C_Texture with a reference to the corresponding texture
@@ -411,6 +303,7 @@ int main() {
             int nw = tex->width;
             int nh = tex->height;
 
+            // detect presence of optional component Opacity
             float opacity = o ? o->alpha : 1.0f;
             Color faded = Fade(WHITE, opacity);
             DrawTexturePro(*tex, {0.0f, 0.0f, (float)nw, (float)nh},
@@ -519,7 +412,7 @@ int main() {
     if (spawn && count < evil_per_check) {
       ecs.entity()
           .set<Position>(
-              {(float)GetRandomValue(0, 1000), (float)GetRandomValue(0, 1000)})
+              {(float)GetRandomValue(0, W_WIDTH), (float)GetRandomValue(0, W_HEIGHT)})
           .set<Scale>({3})
           .set<Rotation>({0.0})
           .set<Velocity>({{0, 0}, 350})
@@ -528,7 +421,7 @@ int main() {
           .set<R_Layer>({2})
           .set<Collider>({{0, 0, 16 * 3, 16 * 3}})
           .add<Enemy>()
-          .set<Emitter>({"../resources/vamp/particles/sick.png", 0.8})
+          .set<Emitter>({"../resources/vamp/particles/sick.png", 0.4, 0.5, 40.})
           .set<Ephemeral>({300.})
           .add<Octophant>();
       count++;
@@ -560,10 +453,13 @@ int main() {
     EndDrawing();
   }
 
+  printf("\nCleaning up...\n");
+
   // cleanup textures
-  // idk if its okay to try to unload the same pointer a hundred times, it seems
-  // to work though
-  // ecs.each([](C_Texture &t) { UnloadTexture(*t.tex); });
+  for (auto it : TextureLibrary) {
+    printf("Unloading texture @%s\n", it.first);
+    UnloadTexture(it.second);
+  }
 
 #ifdef DEBUG_UI
   rlImGuiShutdown();
